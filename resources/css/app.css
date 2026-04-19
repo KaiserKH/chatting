@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	:root {
+		--page-bg: linear-gradient(180deg, #fff8f1 0%, #ffe7d6 40%, #ffd6d6 100%);
+		--page-fg: #27272a;
+	}
+
+	body {
+		color: var(--page-fg);
+		background: var(--page-bg);
+		background-attachment: fixed;
+		min-height: 100vh;
+	}
+
+	body.theme-dark {
+		--page-bg: radial-gradient(circle at 20% 20%, #1f2937 0%, #111827 50%, #030712 100%);
+		--page-fg: #e5e7eb;
+	}
+
+	body.theme-romantic {
+		--page-bg: radial-gradient(circle at 10% 10%, #ffe4ec 0%, #ffd6e8 30%, #ffc7c7 60%, #ffe5c2 100%);
+		--page-fg: #4a044e;
+	}
+}
