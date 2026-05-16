@@ -1,5 +1,0 @@
-config/config.php
-storage/sessions/*
-storage/typing/*
-!storage/sessions/.gitignore
-!storage/typing/.gitignore
