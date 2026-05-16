@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleKey {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  VERIFIED_USER
+  PREMIUM_USER
+  NORMAL_USER
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  VOICE
+  SYSTEM
+}
+
+enum DeliveryStatus {
+  SENT
+  DELIVERED
+  SEEN
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallStatus {
+  RINGING
+  ANSWERED
+  MISSED
+  DECLINED
+  ENDED
+}
+
+model User {
+  id                String               @id @default(cuid())
+  username          String               @unique
+  phoneNumber       String
+  email             String?              @unique
+  passwordHash      String
+  bio               String?              @db.VarChar(255)
+  profilePhotoUrl   String?
+  isActive          Boolean              @default(true)
+  lastSeenAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  sessions          Session[]
+  settings          Setting?
+  roleAssignments   UserRole[]
+  userPermissions   UserPermission[]
+  sentFriendReqs    FriendRequest[]      @relation("friend_request_sender")
+  recvFriendReqs    FriendRequest[]      @relation("friend_request_receiver")
+  friendshipsA      Friendship[]         @relation("friendship_user_a")
+  friendshipsB      Friendship[]         @relation("friendship_user_b")
+  blocksGiven       BlockedUser[]        @relation("blocked_user_actor")
+  blocksReceived    BlockedUser[]        @relation("blocked_user_target")
+  messagesSent      Message[]            @relation("message_sender")
+  messageReactions  MessageReaction[]
+  notifications     Notification[]
+  devices           UserDevice[]
+  callerCalls       Call[]               @relation("call_caller")
+  calleeCalls       Call[]               @relation("call_callee")
+  adminActions      AdminActivityLog[]   @relation("admin_actor")
+  adminTargets      AdminActivityLog[]   @relation("admin_target")
+  moderationBy      ModerationAction[]   @relation("moderation_actor")
+  moderationOn      ModerationAction[]   @relation("moderation_target")
+
+  @@index([phoneNumber])
+}
+
+model Session {
+  id             String    @id @default(cuid())
+  userId         String
+  refreshToken   String    @db.VarChar(512)
+  ipAddress      String?
+  userAgent      String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Role {
+  id             String            @id @default(cuid())
+  key            RoleKey           @unique
+  name           String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  users          UserRole[]
+  permissions    RolePermission[]
+}
+
+model Permission {
+  id             String            @id @default(cuid())
+  key            String            @unique
+  description    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  roles          RolePermission[]
+  users          UserPermission[]
+}
+
+model RolePermission {
+  roleId         String
+  permissionId   String
+
+  role           Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission     Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId         String
+  roleId         String
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model UserPermission {
+  userId         String
+  permissionId   String
+  isEnabled      Boolean
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission     Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+}
+
+model FriendRequest {
+  id             String               @id @default(cuid())
+  senderId       String
+  receiverId     String
+  status         FriendRequestStatus  @default(PENDING)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  sender         User                 @relation("friend_request_sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver       User                 @relation("friend_request_receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model RelationshipTag {
+  id               String       @id @default(cuid())
+  key              String       @unique
+  label            String
+  themeConfig      Json?
+  permissionConfig Json?
+  wallpaperUrl     String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  friendships      Friendship[]
+}
+
+model Friendship {
+  id                String           @id @default(cuid())
+  userAId           String
+  userBId           String
+  relationshipTagId String?
+  isMuted           Boolean          @default(false)
+  isFavorite        Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  userA             User             @relation("friendship_user_a", fields: [userAId], references: [id], onDelete: Cascade)
+  userB             User             @relation("friendship_user_b", fields: [userBId], references: [id], onDelete: Cascade)
+  relationshipTag   RelationshipTag? @relation(fields: [relationshipTagId], references: [id], onDelete: SetNull)
+  messages          Message[]
+
+  @@unique([userAId, userBId])
+}
+
+model Message {
+  id                   String          @id @default(cuid())
+  friendshipId         String
+  senderId             String
+  type                 MessageType     @default(TEXT)
+  content              String?         @db.Text
+  replyToId            String?
+  deliveredStatus      DeliveryStatus  @default(SENT)
+  editedAt             DateTime?
+  deletedForEveryoneAt DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  friendship           Friendship      @relation(fields: [friendshipId], references: [id], onDelete: Cascade)
+  sender               User            @relation("message_sender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo              Message?        @relation("message_reply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies              Message[]       @relation("message_reply")
+  reactions            MessageReaction[]
+  media                Media[]
+
+  @@index([friendshipId, createdAt])
+}
+
+model MessageReaction {
+  id             String          @id @default(cuid())
+  messageId      String
+  userId         String
+  emoji          String
+  createdAt      DateTime        @default(now())
+
+  message        Message         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Media {
+  id             String          @id @default(cuid())
+  messageId      String
+  cloudinaryId   String
+  secureUrl      String
+  mimeType       String
+  sizeBytes      Int
+  createdAt      DateTime        @default(now())
+
+  message        Message         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model Notification {
+  id             String          @id @default(cuid())
+  userId         String
+  type           String
+  payload        Json
+  isRead         Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+model BlockedUser {
+  id             String          @id @default(cuid())
+  actorId        String
+  targetId       String
+  createdAt      DateTime        @default(now())
+
+  actor          User            @relation("blocked_user_actor", fields: [actorId], references: [id], onDelete: Cascade)
+  target         User            @relation("blocked_user_target", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([actorId, targetId])
+}
+
+model Setting {
+  id             String          @id @default(cuid())
+  userId         String          @unique
+  theme          String          @default("dark")
+  wallpaperUrl   String?
+  fontSize       String          @default("medium")
+  notifications  Json?
+  privacy        Json?
+  relationship   Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AdminActivityLog {
+  id             String          @id @default(cuid())
+  adminId        String
+  targetUserId   String
+  action         String
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+
+  admin          User            @relation("admin_actor", fields: [adminId], references: [id], onDelete: Restrict)
+  targetUser     User            @relation("admin_target", fields: [targetUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, createdAt])
+}
+
+model ModerationAction {
+  id             String          @id @default(cuid())
+  adminId        String
+  targetUserId   String
+  actionType     String
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+
+  admin          User            @relation("moderation_actor", fields: [adminId], references: [id], onDelete: Restrict)
+  targetUser     User            @relation("moderation_target", fields: [targetUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, createdAt])
+}
+
+model UserDevice {
+  id             String          @id @default(cuid())
+  userId         String
+  deviceId       String
+  name           String?
+  ipAddress      String?
+  lastActiveAt   DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+}
+
+model Call {
+  id             String          @id @default(cuid())
+  callerId       String
+  calleeId       String
+  type           CallType
+  status         CallStatus      @default(RINGING)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  createdAt      DateTime        @default(now())
+
+  caller         User            @relation("call_caller", fields: [callerId], references: [id], onDelete: Cascade)
+  callee         User            @relation("call_callee", fields: [calleeId], references: [id], onDelete: Cascade)
+  history        CallHistory[]
+
+  @@index([callerId, calleeId, createdAt])
+}
+
+model CallHistory {
+  id             String          @id @default(cuid())
+  callId         String
+  eventType      String
+  payload        Json?
+  createdAt      DateTime        @default(now())
+
+  call           Call            @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, createdAt])
+}
