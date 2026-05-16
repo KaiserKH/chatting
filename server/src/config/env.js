@@ -1,6 +1,9 @@
 import dotenv from 'dotenv'
+import path from 'node:path'
 
-dotenv.config({ path: process.env.ENV_FILE || '../../.env' })
+const rootEnvPath = path.resolve(process.cwd(), '../.env')
+dotenv.config()
+dotenv.config({ path: rootEnvPath, override: false })
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',

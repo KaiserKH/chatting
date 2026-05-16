@@ -67,6 +67,7 @@ model User {
   sessions          Session[]
   settings          Setting?
   roleAssignments   UserRole[]
+  userPermissions   UserPermission[]
   sentFriendReqs    FriendRequest[]      @relation("friend_request_sender")
   recvFriendReqs    FriendRequest[]      @relation("friend_request_receiver")
   friendshipsA      Friendship[]         @relation("friendship_user_a")
