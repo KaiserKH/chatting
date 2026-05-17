@@ -88,6 +88,7 @@ The project expects MySQL 8+ running locally on `localhost:3306`.
 - Ran `npm run build` to verify both workspaces compile together.
 - Ran `npm run seed --workspace server` and hit `PrismaClientInitializationError: Can't reach database server at localhost:3306` because MySQL was not running in the local machine.
 - Fixed that by adding [database/mysql-init.sql](database/mysql-init.sql), creating [/.env](.env), and documenting the required local MySQL startup step.
+- Started the app with `npm run dev` after MySQL was live and Prisma was synced. Verified the backend at `http://localhost:5000/api/v1` and the frontend at `http://localhost:5173`.
 - Fixed Prisma relation validation errors in the schema by adding the missing opposite relations for conversation creation, media uploads, and moderation targets.
 - Fixed route and typing issues in the server by narrowing Express params, normalizing request IP values, and returning auth tokens in the login and refresh responses.
 - Fixed JWT helper overload issues by using runtime-safe casts around `jsonwebtoken` secrets and payloads.
