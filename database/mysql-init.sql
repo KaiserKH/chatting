@@ -1,9 +1,133 @@
+-- Database and user creation for the messaging platform
 CREATE DATABASE IF NOT EXISTS messaging_platform
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
+  CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
 
+-- Create dedicated DB user (change password in production)
 CREATE USER IF NOT EXISTS 'chatting_user'@'localhost' IDENTIFIED BY 'chatting_password_change_in_prod';
+CREATE USER IF NOT EXISTS 'chatting_user'@'%' IDENTIFIED BY 'chatting_password_change_in_prod';
+
 GRANT ALL PRIVILEGES ON messaging_platform.* TO 'chatting_user'@'localhost';
+GRANT ALL PRIVILEGES ON messaging_platform.* TO 'chatting_user'@'%';
 FLUSH PRIVILEGES;
 
 USE messaging_platform;
+
+-- Core tables (DDL). This mirrors the app's Prisma schema roughly; adjust as needed.
+CREATE TABLE IF NOT EXISTS `Role` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Permission` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `action` VARCHAR(150) NOT NULL UNIQUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `RolePermission` (
+  `role_id` BIGINT UNSIGNED NOT NULL,
+  `permission_id` BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (`role_id`,`permission_id`),
+  FOREIGN KEY (`role_id`) REFERENCES `Role`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`permission_id`) REFERENCES `Permission`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `User` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `email` VARCHAR(320) NOT NULL UNIQUE,
+  `username` VARCHAR(100) DEFAULT NULL UNIQUE,
+  `password` VARCHAR(255) NOT NULL,
+  `display_name` VARCHAR(150) DEFAULT NULL,
+  `avatar_url` VARCHAR(1000) DEFAULT NULL,
+  `role_id` BIGINT UNSIGNED DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`role_id`) REFERENCES `Role`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Session` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `refresh_token` VARCHAR(1000) NOT NULL,
+  `ip` VARCHAR(45) DEFAULT NULL,
+  `user_agent` VARCHAR(1000) DEFAULT NULL,
+  `expires_at` DATETIME NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `User`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Conversation` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `is_group` TINYINT(1) NOT NULL DEFAULT 0,
+  `title` VARCHAR(300) DEFAULT NULL,
+  `metadata` JSON DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ConversationParticipant` (
+  `conversation_id` BIGINT UNSIGNED NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `joined_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_read_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`conversation_id`,`user_id`),
+  FOREIGN KEY (`conversation_id`) REFERENCES `Conversation`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`user_id`) REFERENCES `User`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Message` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `conversation_id` BIGINT UNSIGNED NOT NULL,
+  `sender_id` BIGINT UNSIGNED NOT NULL,
+  `content` LONGTEXT DEFAULT NULL,
+  `type` VARCHAR(50) NOT NULL DEFAULT 'text',
+  `metadata` JSON DEFAULT NULL,
+  `is_edited` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`conversation_id`) REFERENCES `Conversation`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`sender_id`) REFERENCES `User`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `RelationshipTag` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Relationship` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `target_user_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(50) NOT NULL DEFAULT 'pending',
+  `tag_id` BIGINT UNSIGNED DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `User`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`target_user_id`) REFERENCES `User`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`tag_id`) REFERENCES `RelationshipTag`(`id`) ON DELETE SET NULL,
+  UNIQUE KEY `unique_relationship` (`user_id`,`target_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Attachment` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `message_id` BIGINT UNSIGNED NOT NULL,
+  `url` VARCHAR(2000) NOT NULL,
+  `mime` VARCHAR(255) DEFAULT NULL,
+  `size` BIGINT UNSIGNED DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`message_id`) REFERENCES `Message`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Helpful indexes
+CREATE INDEX IF NOT EXISTS `idx_message_conv_created` ON `Message` (`conversation_id`, `created_at`);
+
+-- Seed minimal roles/permissions placeholders (insert only if empty)
+INSERT INTO `Role` (`name`) SELECT 'super_admin' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `Role` WHERE `name`='super_admin');
+INSERT INTO `Role` (`name`) SELECT 'admin' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `Role` WHERE `name`='admin');
+INSERT INTO `Role` (`name`) SELECT 'user' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `Role` WHERE `name`='user');
+
+-- End of script
