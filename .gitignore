@@ -1,0 +1,15 @@
+node_modules
+.env
+.env.*
+!.env.example
+dist
+build
+coverage
+.vscode
+.DS_Store
+server/prisma/dev.db
+server/prisma/*.db
+server/prisma/migrations
+client/dist
+server/dist
+*.log
