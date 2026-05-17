@@ -48,6 +48,30 @@ These values are intentionally weak for local bootstrapping only and must be rep
    npm run dev
    ```
 
+## MySQL Database Setup
+
+The project expects MySQL 8+ running locally on `localhost:3306`.
+
+1. Create the database and user by running [database/mysql-init.sql](database/mysql-init.sql) in your MySQL client.
+2. Keep the root development connection string in [/.env](.env) or update it to the user created by the SQL script:
+
+   ```env
+   DATABASE_URL=mysql://chatting_user:chatting_password_change_in_prod@localhost:3306/messaging_platform
+   ```
+
+3. Generate the Prisma client and seed the database:
+
+   ```bash
+   npm run prisma:generate --workspace server
+   npm run seed --workspace server
+   ```
+
+4. Start the application:
+
+   ```bash
+   npm run dev
+   ```
+
 ## How I would run it step by step
 
 1. Generate secrets with `node scripts/generate-secrets.js`.
@@ -62,6 +86,8 @@ These values are intentionally weak for local bootstrapping only and must be rep
 - Ran `npm install` at the workspace root to install the server, client, and shared toolchain.
 - Ran `npm run prisma:generate --workspace server` to validate the Prisma schema and generate the client.
 - Ran `npm run build` to verify both workspaces compile together.
+- Ran `npm run seed --workspace server` and hit `PrismaClientInitializationError: Can't reach database server at localhost:3306` because MySQL was not running in the local machine.
+- Fixed that by adding [database/mysql-init.sql](database/mysql-init.sql), creating [/.env](.env), and documenting the required local MySQL startup step.
 - Fixed Prisma relation validation errors in the schema by adding the missing opposite relations for conversation creation, media uploads, and moderation targets.
 - Fixed route and typing issues in the server by narrowing Express params, normalizing request IP values, and returning auth tokens in the login and refresh responses.
 - Fixed JWT helper overload issues by using runtime-safe casts around `jsonwebtoken` secrets and payloads.
