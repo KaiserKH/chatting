@@ -57,6 +57,18 @@ These values are intentionally weak for local bootstrapping only and must be rep
 5. Start the API and client with `npm run dev`.
 6. If a build or runtime error appears, fix the failing slice first, then rerun the same command.
 
+## Implementation Log
+
+- Ran `npm install` at the workspace root to install the server, client, and shared toolchain.
+- Ran `npm run prisma:generate --workspace server` to validate the Prisma schema and generate the client.
+- Ran `npm run build` to verify both workspaces compile together.
+- Fixed Prisma relation validation errors in the schema by adding the missing opposite relations for conversation creation, media uploads, and moderation targets.
+- Fixed route and typing issues in the server by narrowing Express params, normalizing request IP values, and returning auth tokens in the login and refresh responses.
+- Fixed JWT helper overload issues by using runtime-safe casts around `jsonwebtoken` secrets and payloads.
+- Fixed the client route guard typings by switching from `JSX.Element` to `ReactElement`.
+- Refreshed dependencies after adding the Tailwind Vite plugin and updating the router version.
+- Final verification command: `npm run build`.
+
 ## Deployment Notes
 
 - Set `NODE_ENV=production`.

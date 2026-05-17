@@ -1,0 +1,496 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  VERIFIED_USER
+  PREMIUM_USER
+  NORMAL_USER
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  VOICE_NOTE
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallStatus {
+  RINGING
+  ACTIVE
+  ENDED
+  MISSED
+  REJECTED
+}
+
+enum AuditActionType {
+  PROFILE_VIEWED
+  MESSAGES_REVIEWED
+  MEDIA_ACCESSED
+  PERMISSION_CHANGED
+  BLOCK_REMOVED
+  ACCOUNT_MODIFIED
+  ACTIVITY_REVIEWED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_UNSUSPENDED
+  ACCOUNT_BANNED
+  ACCOUNT_UNBANNED
+  PASSWORD_RESET
+  SESSIONS_REVOKED
+}
+
+model User {
+  id                     String              @id @default(cuid())
+  username               String              @unique
+  phone                  String
+  email                  String?             @unique
+  passwordHash           String
+  roleId                 String
+  role                   Role                @relation(fields: [roleId], references: [id])
+  displayName            String?
+  bio                    String?             @db.Text
+  avatarUrl              String?
+  wallpaperUrl           String?
+  theme                  String              @default("dark")
+  privacySettings        Json?
+  notificationSettings    Json?
+  relationshipSettings    Json?
+  isEmailVerified        Boolean             @default(false)
+  passwordResetToken     String?
+  passwordResetExpiresAt DateTime?
+  isActive               Boolean             @default(true)
+  isSuspended            Boolean             @default(false)
+  suspendedReason        String?
+  isBanned               Boolean             @default(false)
+  bannedReason           String?
+  lastSeenAt             DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  devices                UserDevice[]
+  loginHistory           LoginHistory[]
+  sessions               UserSession[]
+  sentFriendRequests     FriendRequest[]      @relation("FriendRequestSender")
+  receivedFriendRequests  FriendRequest[]      @relation("FriendRequestRecipient")
+  friendshipsAsUserA      Friendship[]        @relation("FriendshipUserA")
+  friendshipsAsUserB      Friendship[]        @relation("FriendshipUserB")
+  blockedUsers            BlockedUser[]       @relation("BlockedBy")
+  blockedByUsers          BlockedUser[]       @relation("BlockedUser")
+  sentMessages            Message[]           @relation("MessageSender")
+  reactions               MessageReaction[]
+  edits                   MessageEdit[]
+  starredMessages         StarredMessage[]
+  pinnedMessages          PinnedMessage[]
+  notifications           Notification[]
+  settings                UserSetting?
+  adminActivityLogs       AdminActivityLog[]  @relation("AdminActivityTarget")
+  adminActionsPerformed   AdminActivityLog[]  @relation("AdminActivityActor")
+  moderationActions       ModerationAction[]  @relation("ModerationActor")
+  moderatedTargets        ModerationAction[]  @relation("ModerationTarget")
+  callsInitiated          Call[]              @relation("CallInitiator")
+  callsReceived           Call[]              @relation("CallRecipient")
+  callHistoryEntries      CallHistory[]       @relation("CallHistoryUser")
+  userPermissions         UserPermission[]
+  ownedRelationships      UserRelationship[]   @relation("RelationshipOwner")
+  targetRelationships     UserRelationship[]   @relation("RelationshipTarget")
+  createdConversations    Conversation[]      @relation("ConversationCreator")
+  uploadedMedia           Media[]             @relation("MediaUploader")
+  conversationParticipants ConversationParticipant[]
+}
+
+model UserDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  deviceName  String
+  ipAddress   String
+  userAgent   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model LoginHistory {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  deviceName String
+  ipAddress  String
+  userAgent  String
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model UserSession {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  refreshTokenHash String
+  deviceName       String
+  ipAddress        String
+  userAgent        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        RoleName         @unique
+  displayName String
+  rank        Int
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id            String           @id @default(cuid())
+  key           String           @unique
+  description   String?
+  defaultValue  Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  roleSettings  RolePermission[]
+  userSettings  UserPermission[]
+}
+
+model RolePermission {
+  id           String      @id @default(cuid())
+  roleId       String
+  permissionId String
+  enabled      Boolean     @default(false)
+  role         Role        @relation(fields: [roleId], references: [id])
+  permission   Permission  @relation(fields: [permissionId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserPermission {
+  id           String      @id @default(cuid())
+  userId       String
+  permissionId String
+  enabled      Boolean     @default(false)
+  user         User        @relation(fields: [userId], references: [id])
+  permission   Permission  @relation(fields: [permissionId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([userId, permissionId])
+  @@index([permissionId])
+}
+
+model Friendship {
+  id         String            @id @default(cuid())
+  userAId    String
+  userBId    String
+  userA      User              @relation("FriendshipUserA", fields: [userAId], references: [id])
+  userB      User              @relation("FriendshipUserB", fields: [userBId], references: [id])
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+model FriendRequest {
+  id          String            @id @default(cuid())
+  senderId    String
+  recipientId String
+  sender      User              @relation("FriendRequestSender", fields: [senderId], references: [id])
+  recipient   User              @relation("FriendRequestRecipient", fields: [recipientId], references: [id])
+  status      FriendshipStatus  @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([senderId, recipientId])
+  @@index([recipientId])
+}
+
+model RelationshipTag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  displayName String
+  permissions Json?
+  theme      Json?
+  wallpapers Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  relationships UserRelationship[]
+}
+
+model UserRelationship {
+  id           String          @id @default(cuid())
+  ownerId      String
+  targetUserId String
+  tagId        String
+  owner        User            @relation("RelationshipOwner", fields: [ownerId], references: [id])
+  targetUser   User            @relation("RelationshipTarget", fields: [targetUserId], references: [id])
+  tag          RelationshipTag @relation(fields: [tagId], references: [id])
+  notes        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([ownerId, targetUserId, tagId])
+  @@index([targetUserId])
+}
+
+model Conversation {
+  id          String                    @id @default(cuid())
+  isDirect    Boolean                   @default(true)
+  title       String?
+  createdById String?
+  createdBy   User?                     @relation("ConversationCreator", fields: [createdById], references: [id])
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  participants ConversationParticipant[]
+  messages    Message[]
+  pinnedMessages PinnedMessage[]
+
+  @@index([createdById])
+}
+
+model ConversationParticipant {
+  id             String        @id @default(cuid())
+  conversationId String
+  userId         String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime?
+  unreadCount    Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id                 String             @id @default(cuid())
+  conversationId     String
+  senderId           String
+  replyToMessageId   String?
+  type               MessageType        @default(TEXT)
+  text               String?            @db.Text
+  mediaUrl           String?
+  mediaMimeType      String?
+  mediaSizeBytes     Int?
+  deletedForSender   Boolean            @default(false)
+  deletedForEveryone Boolean            @default(false)
+  pinnedAt           DateTime?
+  starredAt          DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  conversation       Conversation       @relation(fields: [conversationId], references: [id])
+  sender             User               @relation("MessageSender", fields: [senderId], references: [id])
+  replyToMessage     Message?           @relation("MessageThread", fields: [replyToMessageId], references: [id])
+  replies            Message[]          @relation("MessageThread")
+  reactions          MessageReaction[]
+  edits              MessageEdit[]
+  media              Media[]
+  starredBy          StarredMessage[]
+  pinnedBy           PinnedMessage[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  message   Message  @relation(fields: [messageId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([messageId, userId, emoji])
+  @@index([userId])
+}
+
+model MessageEdit {
+  id         String   @id @default(cuid())
+  messageId  String
+  editorId   String
+  previousText String? @db.Text
+  newText    String?   @db.Text
+  message    Message   @relation(fields: [messageId], references: [id])
+  editor     User      @relation(fields: [editorId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([messageId])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  messageId  String?
+  uploadedById String
+  message    Message?  @relation(fields: [messageId], references: [id])
+  uploadedBy User      @relation("MediaUploader", fields: [uploadedById], references: [id])
+  url        String
+  publicId    String?
+  mimeType   String
+  sizeBytes  Int
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([uploadedById])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+}
+
+model BlockedUser {
+  id          String   @id @default(cuid())
+  blockerId   String
+  blockedId   String
+  blocker     User     @relation("BlockedBy", fields: [blockerId], references: [id])
+  blocked     User     @relation("BlockedUser", fields: [blockedId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model UserSetting {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id])
+  payload              Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model AdminActivityLog {
+  id            String          @id @default(cuid())
+  adminId       String
+  targetUserId  String?
+  actionType    AuditActionType
+  description   String
+  affectedField String?
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  admin         User            @relation("AdminActivityActor", fields: [adminId], references: [id])
+  targetUser    User?           @relation("AdminActivityTarget", fields: [targetUserId], references: [id])
+
+  @@index([adminId])
+  @@index([targetUserId])
+}
+
+model ModerationAction {
+  id          String   @id @default(cuid())
+  actorId     String
+  targetUserId String
+  action      String
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  actor       User     @relation("ModerationActor", fields: [actorId], references: [id])
+  targetUser  User     @relation("ModerationTarget", fields: [targetUserId], references: [id])
+
+  @@index([targetUserId])
+}
+
+model Call {
+  id            String     @id @default(cuid())
+  initiatorId   String
+  recipientId   String
+  conversationId String?
+  type          CallType
+  status        CallStatus @default(RINGING)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  signalingData Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  initiator     User       @relation("CallInitiator", fields: [initiatorId], references: [id])
+  recipient     User       @relation("CallRecipient", fields: [recipientId], references: [id])
+
+  @@index([recipientId])
+}
+
+model CallHistory {
+  id           String     @id @default(cuid())
+  userId       String
+  peerUserId   String
+  callId       String?
+  type         CallType
+  status       CallStatus
+  durationSec  Int         @default(0)
+  createdAt    DateTime    @default(now())
+  user         User        @relation("CallHistoryUser", fields: [userId], references: [id])
+
+  @@index([peerUserId])
+}
+
+model StarredMessage {
+  id         String   @id @default(cuid())
+  userId     String
+  messageId  String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  message    Message  @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId])
+}
+
+model PinnedMessage {
+  id             String      @id @default(cuid())
+  userId         String
+  conversationId String
+  messageId      String
+  createdAt      DateTime    @default(now())
+  user           User        @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  message        Message     @relation(fields: [messageId], references: [id])
+
+  @@unique([conversationId, messageId])
+}
